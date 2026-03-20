@@ -1,0 +1,9 @@
+# 表情包爬虫和索引构建依赖
+requests>=2.31.0
+Pillow>=10.0.0
+numpy>=1.24.0
+torch>=2.0.0
+open-clip-torch>=2.24.0
+tqdm>=4.66.0
+huggingface_hub>=0.20.0
+datasets>=2.14.0
