@@ -162,7 +162,7 @@ API 配置位于 `config/gemini.json`：
 
 ## HTML 模板
 
-模板位于 `outputs/articles/template.html`，包含：
+模板位于 `templates/article.html`，包含：
 
 - 微信公众号风格 CSS
 - 响应式布局

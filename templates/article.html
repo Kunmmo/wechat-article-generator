@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{TITLE}}</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, 
+                   "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", 
+                   sans-serif;
+      line-height: 1.8;
+      color: #333;
+      background: #f5f5f5;
+    }
+    
+    .wechat-article {
+      max-width: 677px;
+      margin: 0 auto;
+      padding: 20px 15px;
+      background: #fff;
+    }
+    
+    .article-title {
+      font-size: 22px;
+      font-weight: bold;
+      color: #000;
+      margin-bottom: 20px;
+      line-height: 1.4;
+    }
+    
+    .article-meta {
+      font-size: 14px;
+      color: #999;
+      margin-bottom: 25px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .article-meta span {
+      margin-right: 15px;
+    }
+    
+    .article-content {
+      font-size: 17px;
+      color: #333;
+    }
+    
+    .article-content p {
+      margin-bottom: 20px;
+      text-align: justify;
+    }
+    
+    .article-content h2 {
+      font-size: 19px;
+      font-weight: bold;
+      color: #000;
+      margin: 30px 0 15px;
+      padding-left: 10px;
+      border-left: 4px solid #07c160;
+    }
+    
+    .article-content h3 {
+      font-size: 17px;
+      font-weight: bold;
+      color: #333;
+      margin: 25px 0 12px;
+    }
+    
+    .article-content img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 20px auto;
+      border-radius: 4px;
+    }
+    
+    .article-content .meme-img {
+      max-width: 200px;
+      margin: 15px auto;
+    }
+    
+    .article-content .featured-img {
+      max-width: 100%;
+      margin: 25px auto;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    .article-content blockquote {
+      background: #f7f7f7;
+      border-left: 4px solid #ddd;
+      padding: 15px 20px;
+      margin: 20px 0;
+      color: #666;
+      font-size: 15px;
+    }
+    
+    .article-content ul, 
+    .article-content ol {
+      margin: 15px 0;
+      padding-left: 25px;
+    }
+    
+    .article-content li {
+      margin-bottom: 8px;
+    }
+    
+    .article-content strong {
+      color: #07c160;
+    }
+    
+    .article-content em {
+      color: #576b95;
+      font-style: normal;
+    }
+    
+    .article-content a {
+      color: #576b95;
+      text-decoration: none;
+    }
+    
+    .article-content a:hover {
+      text-decoration: underline;
+    }
+    
+    .highlight-box {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 25px 0;
+    }
+    
+    .highlight-box p {
+      color: #fff;
+      margin-bottom: 10px;
+    }
+    
+    .highlight-box p:last-child {
+      margin-bottom: 0;
+    }
+    
+    .data-card {
+      background: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-radius: 8px;
+      padding: 15px 20px;
+      margin: 20px 0;
+    }
+    
+    .data-card .label {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 5px;
+    }
+    
+    .data-card .value {
+      font-size: 24px;
+      font-weight: bold;
+      color: #07c160;
+    }
+    
+    .news-source {
+      font-size: 14px;
+      color: #999;
+      padding: 5px 10px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      display: inline-block;
+      margin: 10px 0;
+    }
+    
+    .article-footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+      font-size: 14px;
+      color: #999;
+      text-align: center;
+    }
+    
+    .article-footer .tags {
+      margin-top: 15px;
+    }
+    
+    .article-footer .tag {
+      display: inline-block;
+      padding: 3px 10px;
+      background: #f5f5f5;
+      border-radius: 3px;
+      margin: 3px;
+      font-size: 12px;
+      color: #666;
+    }
+    
+    .workflow-info {
+      margin-top: 30px;
+      padding: 15px;
+      background: #fafafa;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #999;
+    }
+    
+    .workflow-info h4 {
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 10px;
+    }
+    
+    .workflow-info .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+      border-bottom: 1px dashed #eee;
+    }
+    
+    .workflow-info .info-row:last-child {
+      border-bottom: none;
+    }
+    
+    @media (max-width: 750px) {
+      .wechat-article {
+        padding: 15px 12px;
+      }
+      
+      .article-title {
+        font-size: 20px;
+      }
+      
+      .article-content {
+        font-size: 16px;
+      }
+      
+      .article-content h2 {
+        font-size: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <article class="wechat-article">
+    <h1 class="article-title">{{TITLE}}</h1>
+    
+    <div class="article-meta">
+      <span>生成时间：{{TIMESTAMP}}</span>
+      <span>字数：{{WORD_COUNT}}</span>
+    </div>
+    
+    <div class="article-content">
+      {{CONTENT}}
+    </div>
+    
+    <div class="article-footer">
+      <p>由 AI 三智能体协作生成</p>
+      <p style="margin-top: 5px;">深度思考者 × Meme大师 × 铁面主编</p>
+      
+      <div class="tags">
+        {{TAGS}}
+      </div>
+    </div>
+    
+    <div class="workflow-info">
+      <h4>工作流信息</h4>
+      <div class="info-row">
+        <span>工作流版本</span>
+        <span>v2.0</span>
+      </div>
+      <div class="info-row">
+        <span>辩论轮次</span>
+        <span>{{ROUNDS}}</span>
+      </div>
+      <div class="info-row">
+        <span>最终评分</span>
+        <span>{{SCORE}}</span>
+      </div>
+      <div class="info-row">
+        <span>表情包数量</span>
+        <span>{{MEME_COUNT}}</span>
+      </div>
+      <div class="info-row">
+        <span>配图数量</span>
+        <span>{{IMG_COUNT}}</span>
+      </div>
+    </div>
+  </article>
+</body>
+</html>

@@ -328,7 +328,7 @@ def get_relative_path(image_path: str) -> str:
 
 
 def render_html(content: str, title: str, image_results: dict, 
-                template_path: str = "outputs/articles/template.html") -> str:
+                template_path: str = "templates/article.html") -> str:
     """
     将处理后的内容渲染为 HTML
     """

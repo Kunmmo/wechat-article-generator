@@ -38,9 +38,8 @@ memes/images/
 memes/embeddings.npy
 data/articles/*.json
 
-# Generated images (keep templates)
-outputs/images/memes/
-outputs/images/illustrations/
+# Generated outputs (articles, images)
+outputs/
 
 # Config with API keys
 config/gemini.json
