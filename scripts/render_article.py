@@ -141,12 +141,18 @@ def generate_image(prompt: str, image_type: str = "meme") -> Optional[str]:
         prefix = "gen_illust"
     
     # 构造 API 请求
-    url = f"{config['base_url']}/models/{config['model']}:generateContent"
+    model = config.get('model', 'gemini-2.0-flash-exp-image-generation')
+    url = f"{config['base_url']}/models/{model}:generateContent"
     headers = {"Content-Type": "application/json"}
     params = {"key": config['api_key']}
     payload = {
         "contents": [{"parts": [{"text": full_prompt}]}],
-        "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}
+        "generationConfig": {
+            "temperature": 1,
+            "topK": 40,
+            "topP": 0.95,
+            "maxOutputTokens": 8192,
+        }
     }
     
     try:
@@ -305,6 +311,22 @@ def process_article(content: str, retriever: Optional[MemeRetriever] = None) -> 
     return results
 
 
+def get_relative_path(image_path: str) -> str:
+    """
+    将图片路径转换为相对于 outputs/articles/ 的路径
+    
+    输入: outputs/images/memes/xxx.png
+    输出: ../images/memes/xxx.png
+    """
+    if image_path.startswith("outputs/"):
+        # 去掉 "outputs/" 前缀，加上 "../"
+        return "../" + image_path[8:]  # 8 = len("outputs/")
+    elif image_path.startswith("memes/"):
+        # memes/images/xxx.png -> ../../memes/images/xxx.png
+        return "../../" + image_path
+    return image_path
+
+
 def render_html(content: str, title: str, image_results: dict, 
                 template_path: str = "outputs/articles/template.html") -> str:
     """
@@ -314,17 +336,21 @@ def render_html(content: str, title: str, image_results: dict,
     for tag, info in image_results["memes"].items():
         pattern = rf'\[MEME:\s*{re.escape(tag)}\]'
         if info["path"]:
+            img_path = get_relative_path(info["path"])
             replacement = f'''<div class="meme-placeholder">
-        <img src="../../../{info['path']}" alt="{tag}" class="meme-img">
+        <img src="{img_path}" alt="{tag}" class="meme-img">
       </div>'''
         else:
             # 使用 emoji 占位
             emoji_map = {
                 "震惊": "😱", "目瞪口呆": "😱", "DNA动了": "🧬",
                 "狗头": "🐶", "无语": "😑", "钞票": "💸",
-                "危险": "⚠️", "警告": "⚠️"
+                "危险": "⚠️", "警告": "⚠️", "蜡烛": "🕯️",
+                "悼念": "🕯️", "破防": "😭", "泪目": "😭",
+                "敬礼": "🫡", "致敬": "🫡", "叹气": "😮‍💨", "无奈": "😮‍💨"
             }
-            emoji = emoji_map.get(tag.split('/')[0], "😀")
+            first_key = tag.split('/')[0]
+            emoji = emoji_map.get(first_key, "😀")
             replacement = f'''<div class="meme-placeholder">
         <span class="emoji">{emoji}</span>
         <span>{tag}</span>
@@ -335,8 +361,9 @@ def render_html(content: str, title: str, image_results: dict,
     for tag, info in image_results["illustrations"].items():
         pattern = rf'\[IMG:\s*{re.escape(tag)}\]'
         if info["path"]:
+            img_path = get_relative_path(info["path"])
             replacement = f'''<div class="img-placeholder">
-        <img src="../../../{info['path']}" alt="{info['description']}" class="featured-img">
+        <img src="{img_path}" alt="{info['description']}" class="featured-img">
       </div>'''
         else:
             replacement = f'''<div class="img-placeholder">
