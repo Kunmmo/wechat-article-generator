@@ -34,10 +34,38 @@ flowchart TD
 | **中控裁判** | 质量把控者 | 评分决策、迭代控制 |
 | **文章渲染器** | 输出工程师 | HTML渲染、图片处理 |
 
+## 多平台支持
+
+本项目支持多种 AI 编程平台，智能体定义可被自动识别：
+
+| 平台 | 配置文件 | 状态 |
+|------|----------|------|
+| **Cursor** | `.cursor/skills/` + `.cursor/rules/` | ✅ 推荐 |
+| **Claude Code** | `CLAUDE.md` | ✅ 支持 |
+| **GitHub Copilot** | `.github/copilot-instructions.md` | ✅ 支持 |
+| **Windsurf** | `.windsurfrules` | ✅ 支持 |
+| **Aider** | `.aider.conf.yml` | ✅ 支持 |
+| **通用** | `AGENTS.md` + `agents/` | ✅ 通用 |
+
+### 一键配置
+
+```bash
+# 配置所有平台
+./scripts/setup_platform.sh all
+
+# 配置特定平台
+./scripts/setup_platform.sh cursor
+./scripts/setup_platform.sh claude
+```
+
+详细使用说明见 [`docs/PLATFORM_GUIDE.md`](docs/PLATFORM_GUIDE.md)
+
 ## 项目结构
 
 ```
 .
+├── agents/                      # 通用智能体定义（跨平台）
+│   ├── */AGENT.md               # 各智能体定义
 ├── .cursor/skills/              # Cursor Skills（核心）
 │   ├── news-researcher/         # 时事研究员技能
 │   ├── deep-thinker/            # 深度思考者技能
@@ -69,6 +97,14 @@ flowchart TD
 │   └── images/                  # 生成的图片 [v2.1新增]
 │       ├── memes/               # 生成的表情包
 │       └── illustrations/       # 生成的插图
+├── AGENTS.md                    # 通用智能体说明
+├── CLAUDE.md                    # Claude Code 配置
+├── .windsurfrules               # Windsurf 配置
+├── .aider.conf.yml              # Aider 配置
+├── .github/
+│   └── copilot-instructions.md  # GitHub Copilot 配置
+├── docs/
+│   └── PLATFORM_GUIDE.md        # 多平台使用指南
 ├── 毕业设计任务书.md
 └── 开题报告.md
 ```

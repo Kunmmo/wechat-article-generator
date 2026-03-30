@@ -1,0 +1,49 @@
+# Windsurf Rules - WeChat Article Generator
+
+## 项目概述
+
+这是一个多智能体公众号文章生成系统，通过多个 AI 人格的协作与辩论生成高质量图文内容。
+
+## 智能体系统
+
+项目在 `agents/` 目录定义了多个智能体：
+
+- `agents/triagent-workflow/` - 工作流控制器
+- `agents/news-researcher/` - 时事研究员
+- `agents/deep-thinker/` - 深度思考者
+- `agents/meme-master/` - Meme大师
+- `agents/chief-editor/` - 铁面主编
+- `agents/central-judge/` - 中控裁判
+- `agents/article-renderer/` - 文章渲染器
+- `agents/meme-retriever/` - 表情包检索
+- `agents/image-generator/` - 图片生成器
+- `agents/illustration-generator/` - 插图生成器
+
+## 工作流程
+
+当用户请求生成文章时：
+
+1. 阅读 `agents/triagent-workflow/AGENT.md` 获取完整流程
+2. 按照多智能体辩论流程执行
+3. 最终输出 HTML 文件到 `outputs/articles/`
+
+## 代码规范
+
+- Python 代码遵循 PEP 8
+- 使用类型注解
+- 文章内容使用中文
+
+## 重要目录
+
+```
+agents/           # 智能体定义
+scripts/          # Python 脚本
+config/           # API 配置
+outputs/articles/ # 生成的文章
+memes/            # 表情包库
+```
+
+## 安全提醒
+
+- 不要提交 `config/gemini.json`（包含 API Key）
+- 使用 `config/gemini.example.json` 作为模板

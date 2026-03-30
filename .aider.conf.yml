@@ -1,0 +1,25 @@
+# Aider Configuration for WeChat Article Generator
+
+# Read agent definitions on startup
+read:
+  - AGENTS.md
+  - agents/triagent-workflow/AGENT.md
+
+# Gitignore patterns (already in .gitignore)
+# auto-commits: false
+
+# Model settings (customize as needed)
+# model: gpt-4
+# edit-format: diff
+
+# Lint command
+# lint-cmd: python -m flake8
+
+# Test command  
+# test-cmd: python -m pytest
+
+# Auto-add files to chat
+# auto-add: true
+
+# Show diffs
+# show-diffs: true

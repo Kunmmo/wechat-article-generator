@@ -1,0 +1,55 @@
+---
+description: 微信公众号文章生成器 - 多智能体系统规则
+globs: 
+alwaysApply: true
+---
+
+# WeChat Article Generator Rules
+
+## 项目概述
+
+这是一个基于多智能体辩论机制的微信公众号文章生成系统。
+
+## 智能体系统
+
+项目包含以下智能体（定义在 `agents/` 和 `.cursor/skills/`）：
+
+| 智能体 | Skills 路径 | Agents 路径 |
+|--------|-------------|-------------|
+| 工作流控制 | `.cursor/skills/triagent-workflow/` | `agents/triagent-workflow/` |
+| 时事研究员 | `.cursor/skills/news-researcher/` | `agents/news-researcher/` |
+| 深度思考者 | `.cursor/skills/deep-thinker/` | `agents/deep-thinker/` |
+| Meme大师 | `.cursor/skills/meme-master/` | `agents/meme-master/` |
+| 铁面主编 | `.cursor/skills/chief-editor/` | `agents/chief-editor/` |
+| 中控裁判 | `.cursor/skills/central-judge/` | `agents/central-judge/` |
+| 文章渲染器 | `.cursor/skills/article-renderer/` | `agents/article-renderer/` |
+
+## 文章生成触发
+
+当用户请求以下任务时，使用三智能体工作流：
+- "写一篇关于 xxx 的公众号文章"
+- "用三智能体模式生成内容"
+- "启动辩论工作流"
+
+**操作**：读取 `.cursor/skills/triagent-workflow/SKILL.md` 或 `agents/triagent-workflow/AGENT.md`
+
+## 代码规范
+
+- Python: PEP 8 + 类型注解
+- 文章内容: 中文
+- 图片标记: `[MEME: tag]` 和 `[IMG: description]`
+
+## 关键目录
+
+```
+.cursor/skills/   # Cursor Skills（推荐使用）
+agents/           # 通用智能体定义
+scripts/          # Python 脚本
+config/           # API 配置
+outputs/articles/ # 生成的文章
+```
+
+## 安全
+
+- 不提交 `config/gemini.json`
+- 使用环境变量存储敏感信息
