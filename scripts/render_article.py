@@ -19,6 +19,12 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, Tuple
 
+try:
+    import markdown
+    HAS_MARKDOWN = True
+except ImportError:
+    HAS_MARKDOWN = False
+
 
 def load_config():
     """加载 Gemini API 配置"""
@@ -311,6 +317,134 @@ def process_article(content: str, retriever: Optional[MemeRetriever] = None) -> 
     return results
 
 
+def markdown_to_html(content: str) -> str:
+    """
+    将 Markdown 转换为 HTML
+    """
+    if HAS_MARKDOWN:
+        # 使用 markdown 库
+        md = markdown.Markdown(extensions=['tables', 'fenced_code'])
+        html = md.convert(content)
+        return html
+    
+    # 简单的 Markdown 转换（备选方案）
+    lines = content.split('\n')
+    html_lines = []
+    in_blockquote = False
+    in_list = False
+    in_table = False
+    
+    for line in lines:
+        stripped = line.strip()
+        
+        # 处理水平线
+        if stripped == '---' or stripped == '***':
+            if in_blockquote:
+                html_lines.append('</blockquote>')
+                in_blockquote = False
+            html_lines.append('<div class="divider"></div>')
+            continue
+        
+        # 处理标题
+        if stripped.startswith('# '):
+            html_lines.append(f'<h1>{stripped[2:]}</h1>')
+            continue
+        elif stripped.startswith('## '):
+            html_lines.append(f'<h2>{stripped[3:]}</h2>')
+            continue
+        elif stripped.startswith('### '):
+            html_lines.append(f'<h3>{stripped[4:]}</h3>')
+            continue
+        
+        # 处理引用
+        if stripped.startswith('> '):
+            if not in_blockquote:
+                html_lines.append('<blockquote>')
+                in_blockquote = True
+            quote_content = stripped[2:]
+            # 处理引用内的加粗
+            quote_content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', quote_content)
+            html_lines.append(f'<p>{quote_content}</p>')
+            continue
+        elif in_blockquote and stripped == '':
+            html_lines.append('</blockquote>')
+            in_blockquote = False
+            continue
+        
+        # 处理列表
+        if stripped.startswith('- ') or stripped.startswith('* '):
+            if not in_list:
+                html_lines.append('<ul>')
+                in_list = True
+            list_content = stripped[2:]
+            list_content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', list_content)
+            html_lines.append(f'<li>{list_content}</li>')
+            continue
+        elif stripped.startswith(('1. ', '2. ', '3. ', '4. ', '5. ')):
+            if not in_list:
+                html_lines.append('<ol>')
+                in_list = True
+            list_content = stripped[3:]
+            list_content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', list_content)
+            html_lines.append(f'<li>{list_content}</li>')
+            continue
+        elif in_list and stripped == '':
+            if '<ol>' in ''.join(html_lines[-10:]):
+                html_lines.append('</ol>')
+            else:
+                html_lines.append('</ul>')
+            in_list = False
+            continue
+        
+        # 处理表格
+        if '|' in stripped and stripped.startswith('|'):
+            if not in_table:
+                html_lines.append('<table>')
+                in_table = True
+            if stripped.replace('|', '').replace('-', '').replace(' ', '') == '':
+                continue  # 跳过分隔行
+            cells = [c.strip() for c in stripped.split('|')[1:-1]]
+            row_html = '<tr>' + ''.join(f'<td>{c}</td>' for c in cells) + '</tr>'
+            html_lines.append(row_html)
+            continue
+        elif in_table and '|' not in stripped:
+            html_lines.append('</table>')
+            in_table = False
+        
+        # 处理普通段落
+        if stripped:
+            # 如果是 HTML 标签，直接保留
+            if stripped.startswith('<') and stripped.endswith('>'):
+                html_lines.append(stripped)
+                continue
+            if stripped.startswith('<div') or stripped.startswith('</div') or stripped.startswith('<img'):
+                html_lines.append(stripped)
+                continue
+            
+            # 处理加粗
+            para = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', stripped)
+            # 处理斜体
+            para = re.sub(r'\*(.+?)\*', r'<em>\1</em>', para)
+            # 处理行内代码
+            para = re.sub(r'`(.+?)`', r'<code>\1</code>', para)
+            html_lines.append(f'<p>{para}</p>')
+        elif stripped == '':
+            # 空行
+            if in_blockquote:
+                html_lines.append('</blockquote>')
+                in_blockquote = False
+    
+    # 关闭未关闭的标签
+    if in_blockquote:
+        html_lines.append('</blockquote>')
+    if in_list:
+        html_lines.append('</ul>')
+    if in_table:
+        html_lines.append('</table>')
+    
+    return '\n'.join(html_lines)
+
+
 def get_relative_path(image_path: str) -> str:
     """
     将图片路径转换为相对于 outputs/articles/ 的路径
@@ -392,11 +526,14 @@ def render_html(content: str, title: str, image_results: dict,
 </body>
 </html>"""
     
+    # 将 Markdown 转换为 HTML
+    content_html = markdown_to_html(content)
+    
     # 替换模板变量
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     html = html.replace("{{TITLE}}", title)
     html = html.replace("{{TIMESTAMP}}", timestamp)
-    html = html.replace("{{CONTENT}}", content)
+    html = html.replace("{{CONTENT}}", content_html)
     html = html.replace("{{WORD_COUNT}}", str(len(content)))
     html = html.replace("{{ROUNDS}}", "1")
     html = html.replace("{{SCORE}}", "8.0/10")
