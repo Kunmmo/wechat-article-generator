@@ -1,0 +1,27 @@
+# 核心依赖
+requests>=2.31.0
+Pillow>=10.0.0
+numpy>=1.24.0
+markdown>=3.5.0
+
+# CLIP 模型（表情包索引 & 检索 & 评分）
+torch>=2.0.0
+open-clip-torch>=2.24.0
+
+# 表情包数据采集
+tqdm>=4.66.0
+huggingface_hub>=0.20.0
+datasets>=2.14.0
+
+# Web 界面
+flask>=3.0.0
+
+# 多模型路由（可选，按需安装）
+# openai>=1.0.0
+# anthropic>=0.20.0
+
+# Chinese-CLIP（可选，中文语义检索增强）
+# cn_clip>=1.0.0
+
+# VQA Score（可选，图文对齐补充评估）
+# transformers>=4.35.0

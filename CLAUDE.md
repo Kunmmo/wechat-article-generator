@@ -5,63 +5,108 @@ This is a multi-agent article generation system for WeChat Official Accounts. Th
 ## Project Overview
 
 - **Purpose**: Generate WeChat articles with depth and virality through multi-agent collaboration
-- **Tech Stack**: Python scripts, CLIP for image retrieval, Gemini for image generation
+- **Tech Stack**: Python scripts, CLIP for image retrieval, Gemini/SD for image generation
 - **Output**: HTML articles in WeChat Official Account style
+- **Architecture**: Inspired by Claude Code patterns (query loop, tool abstraction, context compression, coordinator mode)
 
 ## Agent System
 
-The core system consists of multiple specialized agents defined in `agents/` directory:
-
 | Agent | File | Role |
 |-------|------|------|
-| Workflow Controller | `agents/triagent-workflow/AGENT.md` | Orchestrates the entire workflow |
-| News Researcher | `agents/news-researcher/AGENT.md` | Searches for current events using WebSearch |
-| Deep Thinker | `agents/deep-thinker/AGENT.md` | Writes in-depth analysis (use DeepSeek) |
+| Coordinator | `agents/coordinator/AGENT.md` | Dynamic orchestration via [DISPATCH] protocol (v3.0) |
+| Workflow Controller | `agents/triagent-workflow/AGENT.md` | Legacy static workflow definition |
+| News Researcher | `agents/news-researcher/AGENT.md` | Searches for current events |
+| Deep Thinker | `agents/deep-thinker/AGENT.md` | Writes in-depth analysis |
 | Meme Master | `agents/meme-master/AGENT.md` | Adds internet culture and meme tags |
 | Chief Editor | `agents/chief-editor/AGENT.md` | Balances depth and virality |
 | Central Judge | `agents/central-judge/AGENT.md` | Evaluates quality, decides PASS/REVISE/POLISH |
 | Article Renderer | `agents/article-renderer/AGENT.md` | Renders final HTML with images |
-| Meme Retriever | `agents/meme-retriever/AGENT.md` | CLIP-based meme search |
-| Image Generator | `agents/image-generator/AGENT.md` | Generates memes via Gemini |
-| Illustration Generator | `agents/illustration-generator/AGENT.md` | Generates article illustrations |
 
-## Workflow
+## Workflow Modes
 
-When user requests article generation (e.g., "写一篇关于 AI 的公众号文章"):
+### Coordinator Mode (v3.0 — recommended)
 
-1. Read `agents/triagent-workflow/AGENT.md` for complete workflow
-2. Follow the multi-agent debate process
-3. Use WebSearch for news when acting as News Researcher
-4. Output HTML file to `outputs/articles/`
+LLM-driven dynamic orchestration. The coordinator agent decides which workers to dispatch and when.
+
+```bash
+python scripts/coordinator_workflow.py --topic "AI 发展趋势" --max-rounds 3
+```
+
+### Legacy Mode (v2.1)
+
+Hard-coded sequential pipeline with debate loop.
+
+```bash
+python scripts/run_workflow.py --topic "AI 发展趋势" --max-rounds 3
+```
+
+### Web Interface
+
+```bash
+python scripts/web_app.py --port 5000
+```
+
+## Architecture (Claude Code-inspired)
+
+```
+scripts/
+├── query_engine.py          # Loop-based agent engine (inspired by query.ts)
+├── coordinator_workflow.py  # Coordinator-driven workflow (v3.0)
+├── run_workflow.py          # Legacy workflow runner (v2.1)
+├── model_router.py          # Resilient LLM router (retry + circuit breaker + fallback)
+├── events.py                # Typed event bus (replaces print monkey-patch)
+├── tools/                   # Tool abstraction layer (inspired by Tool.ts)
+│   ├── base.py              # ToolSpec, ToolResult, ToolContext
+│   ├── registry.py          # Ordered tool registry
+│   ├── executor.py          # Parallel/serial tool executor
+│   └── implementations.py   # Concrete tool wrappers
+├── context/                 # Context window management (inspired by compact/)
+│   └── manager.py           # Three-layer compression (micro → auto → full)
+├── render_article.py        # HTML/Markdown rendering + image processing
+├── evaluate_articles.py     # Quantitative evaluation pipeline
+├── clip_score.py            # CLIP Score evaluation
+├── vqa_score.py             # VQA Score evaluation
+├── gemini_client.py         # Unified Gemini/SD image generation
+└── meme_retrieval.py        # CLIP-based meme retrieval (OpenCLIP + CN-CLIP)
+```
 
 ## Key Directories
 
 ```
 agents/           # Agent definitions (read these for personas)
-scripts/          # Python scripts for image processing
-config/           # API configuration (gemini.json for image gen)
+scripts/          # Core Python modules
+config/           # API configuration (models.json, gemini.json)
 outputs/articles/ # Generated HTML articles
 memes/            # Meme library with CLIP embeddings
 ```
 
 ## Important Instructions
 
-1. **When generating articles**: Always start with `agents/triagent-workflow/AGENT.md`
-2. **For image processing**: Use `scripts/render_article.py` 
-3. **API Keys**: Never commit `config/gemini.json`, use `config/gemini.example.json` as template
+1. **When generating articles**: Use `coordinator_workflow.py` (v3.0) or `run_workflow.py` (v2.1)
+2. **For image processing**: Use `scripts/render_article.py`
+3. **API Keys**: Never commit `config/models.json` or `config/gemini.json`
 4. **Language**: Output articles in Chinese (简体中文)
 
 ## Commands
 
 ```bash
+# Coordinator workflow (recommended)
+python scripts/coordinator_workflow.py --topic "..." --max-rounds 3
+
+# Legacy workflow
+python scripts/run_workflow.py --topic "..." --max-rounds 3
+
+# Web interface
+python scripts/web_app.py --port 5000
+
 # Build meme index
 python scripts/download_hf_memes.py
 
-# Generate image (called by agents)
+# Generate image
 python scripts/generate_image.py --prompt "..." --output "..." --type "meme"
 
-# Render article with images
-python scripts/render_article.py --input "article.md" --output "article.html"
+# Evaluate article
+python scripts/evaluate_articles.py --input "article.html" --output "report.json"
 ```
 
 ## Style Guidelines

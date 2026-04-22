@@ -43,6 +43,7 @@ outputs/
 
 # Config with API keys
 config/gemini.json
+config/models.json
 .claude/settings.local.json
 
 # WeRSS
