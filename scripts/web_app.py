@@ -35,8 +35,21 @@ logger = get_logger(__name__)
 
 from events import EventBus, WorkflowEvent, EventType, _STREAM_DONE, _STREAM_FAILED
 
-app = Flask(__name__)
+FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+
+app = Flask(__name__, static_folder=str(FRONTEND_DIST) if FRONTEND_DIST.exists() else None)
 app.secret_key = os.urandom(24)
+
+
+@app.after_request
+def add_cors_headers(response):
+    """Allow cross-origin requests from the Vite dev server."""
+    origin = request.headers.get('Origin', '')
+    if origin.startswith('http://localhost:'):
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Accept'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    return response
 
 PROJECT_ROOT = Path(__file__).parent.parent
 OUTPUTS_DIR = PROJECT_ROOT / "outputs" / "articles"
@@ -542,14 +555,28 @@ def serve_image(subpath):
 
 @app.route("/api/generate", methods=["POST"])
 def api_generate():
-    """Start article generation via EventBus (no print monkey-patching)"""
-    topic = request.form.get("topic", "").strip()
-    if not topic:
-        return "<div class='card'><p style='color:red;'>请输入选题</p></div>", 400
+    """Start article generation via EventBus.
 
-    max_rounds = int(request.form.get("max_rounds", 3))
-    output_format = request.form.get("format", "html")
-    skip_retrieval = request.form.get("skip_retrieval") == "1"
+    Accepts both form-encoded (legacy HTMX) and JSON (new React frontend) payloads.
+    JSON requests receive a JSON response; form requests receive an HTML fragment.
+    """
+    is_json = request.is_json
+    if is_json:
+        body = request.get_json(force=True)
+        topic = (body.get("topic") or "").strip()
+        max_rounds = int(body.get("max_rounds", 3))
+        output_format = body.get("format", "html")
+        skip_retrieval = bool(body.get("skip_retrieval", False))
+    else:
+        topic = request.form.get("topic", "").strip()
+        max_rounds = int(request.form.get("max_rounds", 3))
+        output_format = request.form.get("format", "html")
+        skip_retrieval = request.form.get("skip_retrieval") == "1"
+
+    if not topic:
+        if is_json:
+            return jsonify({"error": "请输入选题"}), 400
+        return "<div class='card'><p style='color:red;'>请输入选题</p></div>", 400
 
     import uuid
     task_id = str(uuid.uuid4())[:8]
@@ -577,16 +604,36 @@ def api_generate():
             output_path = runner.run()
 
             if output_path:
+                p = Path(output_path)
+                stem = p.stem
+                meta_path = p.parent / f"{stem.rsplit('_', 0)[0]}_meta.json"
+                title = topic
+                final_score = 0.0
+                if hasattr(runner, 'score_history') and runner.score_history:
+                    final_score = runner.score_history[-1]
+                for mf in p.parent.glob(f"*_meta.json"):
+                    try:
+                        with open(mf, 'r', encoding='utf-8') as f:
+                            md = json.load(f)
+                        if md.get("topic") == topic:
+                            title = md.get("topic", topic)
+                            break
+                    except Exception:
+                        continue
+
                 result = {
                     "output_path": output_path,
-                    "filename": Path(output_path).name,
-                    "rounds": runner.current_round,
-                    "score": f"{runner.score_history[-1]}/10" if runner.score_history else "N/A",
-                    "word_count": len(runner.final_article),
+                    "filename": p.name,
+                    "article_id": p.stem,
+                    "title": title,
+                    "rounds": getattr(runner, 'current_round', 0),
+                    "score": f"{final_score}/10" if final_score else "N/A",
+                    "final_score": final_score,
+                    "word_count": len(getattr(runner, 'final_article', '')),
                     "image_count": (
                         runner._image_results.get("stats", {}).get("meme_count", 0) +
                         runner._image_results.get("stats", {}).get("illust_count", 0)
-                    ) if hasattr(runner, '_image_results') else 0,
+                    ) if hasattr(runner, '_image_results') and runner._image_results else 0,
                 }
                 active_tasks[task_id]["status"] = "completed"
                 active_tasks[task_id]["result"] = result
@@ -603,26 +650,63 @@ def api_generate():
     thread = threading.Thread(target=run_workflow, daemon=True)
     thread.start()
 
+    if is_json:
+        return jsonify({"task_id": task_id})
     return render_template_string(PROGRESS_TEMPLATE, task_id=task_id)
 
 
 @app.route("/api/progress/<task_id>")
 def api_progress(task_id):
-    """SSE endpoint consuming typed WorkflowEvents from EventBus"""
+    """SSE endpoint consuming typed WorkflowEvents from EventBus.
+
+    When Accept header includes 'application/json' (React frontend), events are
+    sent as named SSE events with JSON data. Otherwise, HTML fragments (legacy HTMX).
+    """
     task = active_tasks.get(task_id)
     if not task:
         return "任务不存在", 404
 
+    want_json = 'application/json' in request.headers.get('Accept', '')
     event_bus: EventBus = task["bus"]
     sub_queue = event_bus.subscribe()
 
-    def generate():
+    def generate_json():
+        """JSON mode: named SSE events for React frontend"""
         try:
             while True:
                 try:
                     item = sub_queue.get(timeout=120)
 
-                    # Stream-control tuples from emit_done / emit_failed
+                    if isinstance(item, tuple):
+                        sentinel, payload = item
+                        if sentinel == _STREAM_DONE:
+                            result = payload or task.get("result", {})
+                            yield f"event: workflow_end\ndata: {json.dumps(result, ensure_ascii=False)}\n\n"
+                            yield "event: done\ndata: {}\n\n"
+                            break
+                        elif sentinel == _STREAM_FAILED:
+                            err = payload or "Unknown error"
+                            yield f'event: error\ndata: {json.dumps({"message": err}, ensure_ascii=False)}\n\n'
+                            yield "event: done\ndata: {}\n\n"
+                            break
+
+                    if isinstance(item, WorkflowEvent):
+                        evt = item.to_dict()
+                        event_name = evt.get("type", "progress")
+                        yield f"event: {event_name}\ndata: {json.dumps(evt, ensure_ascii=False)}\n\n"
+
+                except queue.Empty:
+                    yield ": keepalive\n\n"
+        finally:
+            event_bus.unsubscribe(sub_queue)
+
+    def generate_html():
+        """HTML mode: legacy HTMX fragments"""
+        try:
+            while True:
+                try:
+                    item = sub_queue.get(timeout=120)
+
                     if isinstance(item, tuple):
                         sentinel, payload = item
                         if sentinel == _STREAM_DONE:
@@ -642,13 +726,11 @@ def api_progress(task_id):
                             yield f'data: <div class="card"><p style="color:red;">Generation failed: {err}</p></div>\n\n'
                             break
 
-                    # Typed WorkflowEvent
                     if isinstance(item, WorkflowEvent):
                         safe_msg = item.message.replace("<", "&lt;").replace(">", "&gt;")
                         css = item.css_class
                         yield f'data: <div class="{css}">{safe_msg}</div>\n\n'
                     else:
-                        # Legacy fallback: plain string
                         safe = str(item).replace("<", "&lt;").replace(">", "&gt;")
                         yield f'data: <div>{safe}</div>\n\n'
 
@@ -657,7 +739,126 @@ def api_progress(task_id):
         finally:
             event_bus.unsubscribe(sub_queue)
 
-    return Response(generate(), mimetype='text/event-stream')
+    gen = generate_json() if want_json else generate_html()
+    return Response(gen, mimetype='text/event-stream')
+
+
+# ============ JSON API for React Frontend ============
+
+KEYWORD_DATA = {
+    "emotions": ["焦虑", "治愈", "暴怒", "共情", "emo", "破防", "上头", "窒息", "感动", "无语", "释然", "社恐"],
+    "objects": ["AI", "咖啡", "考研", "房价", "猫", "新能源", "奶茶", "元宇宙", "打工人", "减肥", "旅行", "数字游民"],
+    "trending": [],
+    "styles": ["讽刺", "温情", "硬核", "毒鸡汤", "学术", "段子手", "深度", "科普", "暗黑", "治愈系"],
+    "memes": ["狗头", "摆烂", "芭比Q", "绝绝子", "YYDS", "栓Q", "蚌埠住了", "内卷", "躺平", "卷王"],
+}
+
+
+@app.route("/api/keywords")
+def api_keywords():
+    """Return categorized keywords for the word cloud."""
+    data = dict(KEYWORD_DATA)
+    meme_tags_path = PROJECT_ROOT / "memes" / "tags.json"
+    if meme_tags_path.exists():
+        try:
+            with open(meme_tags_path, 'r', encoding='utf-8') as f:
+                tags_data = json.load(f)
+            if isinstance(tags_data, list):
+                data["memes"] = list(set(data["memes"] + tags_data[:20]))
+            elif isinstance(tags_data, dict):
+                all_tags = []
+                for v in tags_data.values():
+                    if isinstance(v, list):
+                        all_tags.extend(v[:5])
+                data["memes"] = list(set(data["memes"] + all_tags[:20]))
+        except Exception:
+            pass
+    return jsonify(data)
+
+
+@app.route("/api/articles")
+def api_articles():
+    """List all articles with metadata as JSON."""
+    articles = []
+    if not OUTPUTS_DIR.exists():
+        return jsonify(articles)
+
+    for meta_file in sorted(OUTPUTS_DIR.glob("*_meta.json"), reverse=True):
+        try:
+            with open(meta_file, 'r', encoding='utf-8') as f:
+                meta = json.load(f)
+
+            stem = meta_file.stem.replace("_meta", "")
+            html_file = f"{stem}.html"
+            html_path = OUTPUTS_DIR / html_file
+
+            score = 0.0
+            sh = meta.get("score_history", [])
+            if sh:
+                score = sh[-1] if isinstance(sh[-1], (int, float)) else 0.0
+
+            articles.append({
+                "id": stem,
+                "title": meta.get("topic", "未知选题"),
+                "createdAt": meta.get("created_at", ""),
+                "score": score,
+                "rounds": meta.get("rounds", 0),
+                "format": "html" if html_path.exists() else "markdown",
+                "previewUrl": f"/api/articles/{stem}/preview",
+                "downloadUrl": f"/api/articles/{stem}/download",
+            })
+        except Exception:
+            continue
+
+    return jsonify(articles)
+
+
+@app.route("/api/articles/<article_id>/preview")
+def api_article_preview(article_id):
+    """Return raw HTML content for iframe srcdoc rendering."""
+    if not OUTPUTS_DIR.exists():
+        return "Not found", 404
+
+    html_path = OUTPUTS_DIR / f"{article_id}.html"
+    if html_path.exists():
+        return send_from_directory(str(OUTPUTS_DIR), f"{article_id}.html")
+
+    for f in OUTPUTS_DIR.glob("*.html"):
+        if f.stem == article_id or article_id in f.stem:
+            return send_from_directory(str(OUTPUTS_DIR), f.name)
+
+    return "Not found", 404
+
+
+@app.route("/api/articles/<article_id>/download")
+def api_article_download(article_id):
+    """Download article as attachment."""
+    if not OUTPUTS_DIR.exists():
+        return "Not found", 404
+
+    html_path = OUTPUTS_DIR / f"{article_id}.html"
+    if html_path.exists():
+        return send_from_directory(str(OUTPUTS_DIR), f"{article_id}.html", as_attachment=True)
+
+    for f in OUTPUTS_DIR.glob("*.html"):
+        if f.stem == article_id or article_id in f.stem:
+            return send_from_directory(str(OUTPUTS_DIR), f.name, as_attachment=True)
+
+    return "Not found", 404
+
+
+# ============ Frontend Serving (production build) ============
+
+@app.route("/app")
+@app.route("/app/<path:path>")
+def serve_frontend(path="index.html"):
+    """Serve the React frontend from frontend/dist/."""
+    if not FRONTEND_DIST.exists():
+        return "Frontend not built. Run 'npm run build' in frontend/.", 404
+    full = FRONTEND_DIST / path
+    if full.is_file():
+        return send_from_directory(str(FRONTEND_DIST), path)
+    return send_from_directory(str(FRONTEND_DIST), "index.html")
 
 
 # ============ Entry point ============
