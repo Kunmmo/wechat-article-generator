@@ -1,0 +1,64 @@
+{
+  "agents": {
+    "news-researcher": {
+      "provider": "openai",
+      "model": "gpt-4o",
+      "api_key_env": "OPENAI_API_KEY",
+      "base_url": "https://api.openai.com/v1",
+      "timeout": 180,
+      "fallback": {
+        "provider": "google",
+        "model": "gemini-2.0-flash",
+        "api_key_env": "GEMINI_API_KEY",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta"
+      }
+    },
+    "deep-thinker": {
+      "provider": "openai",
+      "model": "deepseek-chat",
+      "api_key_env": "DEEPSEEK_API_KEY",
+      "base_url": "https://api.deepseek.com/v1",
+      "timeout": 150,
+      "fallback": {
+        "provider": "google",
+        "model": "gemini-2.0-flash",
+        "api_key_env": "GEMINI_API_KEY",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta"
+      }
+    },
+    "meme-master": {
+      "provider": "openai",
+      "model": "gpt-4o",
+      "api_key_env": "OPENAI_API_KEY",
+      "base_url": "https://api.openai.com/v1",
+      "timeout": 120
+    },
+    "chief-editor": {
+      "provider": "google",
+      "model": "gemini-2.0-flash",
+      "api_key_env": "GEMINI_API_KEY",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta",
+      "timeout": 150,
+      "fallback": {
+        "provider": "openai",
+        "model": "gpt-4o",
+        "api_key_env": "OPENAI_API_KEY",
+        "base_url": "https://api.openai.com/v1"
+      }
+    },
+    "central-judge": {
+      "provider": "openai",
+      "model": "gpt-4o",
+      "api_key_env": "OPENAI_API_KEY",
+      "base_url": "https://api.openai.com/v1",
+      "timeout": 90
+    }
+  },
+  "defaults": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "api_key_env": "OPENAI_API_KEY",
+    "base_url": "https://api.openai.com/v1",
+    "timeout": 120
+  }
+}
