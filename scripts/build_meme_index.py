@@ -13,6 +13,10 @@ from typing import Optional
 from PIL import Image
 import torch
 
+from log_config import get_logger
+
+logger = get_logger(__name__)
+
 # 配置
 MEME_DIR = Path("memes/images")
 TAGS_FILE = Path("memes/tags.json")
@@ -38,13 +42,13 @@ def load_clip_model():
         model = model.to(device)
         model.eval()
         
-        print(f"✅ CLIP 模型已加载: {CLIP_MODEL}")
-        print(f"   设备: {device}")
+        logger.info("CLIP 模型已加载: %s", CLIP_MODEL)
+        logger.info("   设备: %s", device)
         
         return model, preprocess, tokenizer, device
         
     except ImportError:
-        print("❌ 请先安装 open_clip: pip install open-clip-torch")
+        logger.error("请先安装 open_clip: pip install open-clip-torch")
         raise
 
 
@@ -64,10 +68,10 @@ def encode_images(model, preprocess, device, image_paths: list[Path]) -> np.ndar
                 embeddings.append(embedding.cpu().numpy()[0])
                 
                 if (i + 1) % 100 == 0:
-                    print(f"   已处理: {i + 1}/{len(image_paths)}")
+                    logger.info("   已处理: %d/%d", i + 1, len(image_paths))
                     
             except Exception as e:
-                print(f"   ⚠️ 跳过 {path.name}: {e}")
+                logger.warning("   跳过 %s: %s", path.name, e)
                 # 使用零向量作为占位
                 embeddings.append(np.zeros(512))  # CLIP ViT-B/32 输出 512 维
     
@@ -105,14 +109,11 @@ def search_meme(query: str, model, tokenizer, device,
 
 def main():
     """主函数"""
-    print("="*50)
-    print("构建 CLIP 向量索引")
-    print("="*50)
+    logger.info("构建 CLIP 向量索引")
     
-    # 检查图片目录
     if not MEME_DIR.exists():
-        print(f"❌ 图片目录不存在: {MEME_DIR}")
-        print("   请先运行 crawl_memes.py")
+        logger.error("图片目录不存在: %s", MEME_DIR)
+        logger.info("   请先运行 crawl_memes.py")
         return
     
     # 获取所有图片
@@ -121,22 +122,21 @@ def main():
         image_paths.extend(MEME_DIR.glob(ext))
     
     if not image_paths:
-        print(f"❌ 未找到图片文件")
+        logger.error("未找到图片文件")
         return
     
-    print(f"📁 找到 {len(image_paths)} 张图片")
+    logger.info("找到 %d 张图片", len(image_paths))
     
     # 加载 CLIP 模型
     model, preprocess, tokenizer, device = load_clip_model()
     
     # 编码图片
-    print("\n🔄 编码图片中...")
+    logger.info("编码图片中...")
     embeddings = encode_images(model, preprocess, device, image_paths)
     
-    # 保存向量
     np.save(EMBEDDINGS_FILE, embeddings)
-    print(f"💾 向量已保存: {EMBEDDINGS_FILE}")
-    print(f"   形状: {embeddings.shape}")
+    logger.info("向量已保存: %s", EMBEDDINGS_FILE)
+    logger.info("   形状: %s", embeddings.shape)
     
     # 保存索引
     index = {
@@ -144,12 +144,11 @@ def main():
         "model": CLIP_MODEL,
         "embedding_dim": embeddings.shape[1],
     }
-    with open(INDEX_FILE, "w", encoding="utf-8") as f:
+    with open(INDEX_FILE, "w", encoding="utf-8", newline="\n") as f:
         json.dump(index, f, ensure_ascii=False, indent=2)
-    print(f"💾 索引已保存: {INDEX_FILE}")
+    logger.info("索引已保存: %s", INDEX_FILE)
     
-    # 测试搜索
-    print("\n🔍 测试搜索...")
+    logger.info("测试搜索...")
     test_queries = ["震惊", "无语", "狗头", "开心"]
     
     for query in test_queries:
@@ -158,14 +157,18 @@ def main():
             embeddings, [str(p.name) for p in image_paths],
             top_k=3
         )
-        print(f"\n   查询: {query}")
+        logger.info("   查询: %s", query)
         for filename, score in results:
-            print(f"      {filename}: {score:.3f}")
+            logger.info("      %s: %.3f", filename, score)
     
-    print("\n" + "="*50)
-    print("✅ 索引构建完成！")
-    print("="*50)
+    logger.info("索引构建完成!")
 
 
 if __name__ == "__main__":
+    from log_config import setup_logging
+    from compat import ensure_utf8_env, get_platform_info
+
+    ensure_utf8_env()
+    setup_logging()
+    logger.info("Platform: %s", get_platform_info())
     main()

@@ -23,6 +23,10 @@ import argparse
 from pathlib import Path
 from typing import Optional
 
+from log_config import get_logger
+
+logger = get_logger(__name__)
+
 # 配置
 MEME_DIR = Path("memes/images")
 TAGS_FILE = Path("memes/tags.json")
@@ -76,22 +80,20 @@ def extract_tags_from_description(description: str) -> list[str]:
 
 def download_from_huggingface(max_count: int = MAX_MEMES) -> list[dict]:
     """从 Hugging Face 下载数据集"""
-    print(f"📥 正在从 Hugging Face 下载数据集: {HF_DATASET}")
-    print(f"   限制数量: {max_count} 张")
+    logger.info("正在从 Hugging Face 下载数据集: %s", HF_DATASET)
+    logger.info("   限制数量: %d 张", max_count)
     
     try:
         from datasets import load_dataset
         
-        # 设置镜像（如果环境变量已设置）
         hf_endpoint = os.getenv("HF_ENDPOINT", "")
         if hf_endpoint:
-            print(f"   使用镜像: {hf_endpoint}")
+            logger.info("   使用镜像: %s", hf_endpoint)
         
-        # 加载数据集
-        print("   正在加载数据集（首次需要下载，约 1.4GB）...")
+        logger.info("   正在加载数据集（首次需要下载，约 1.4GB）...")
         dataset = load_dataset(HF_DATASET, split="train")
         
-        print(f"   数据集大小: {len(dataset)} 条")
+        logger.info("   数据集大小: %d 条", len(dataset))
         
         # 创建输出目录
         MEME_DIR.mkdir(parents=True, exist_ok=True)
@@ -133,30 +135,31 @@ def download_from_huggingface(max_count: int = MAX_MEMES) -> list[dict]:
                 count += 1
                 
                 if count % 100 == 0:
-                    print(f"   已处理: {count}/{max_count}")
+                    logger.info("   已处理: %d/%d", count, max_count)
                     
             except Exception as e:
-                print(f"   ⚠️ 处理失败: {e}")
+                logger.warning("   处理失败: %s", e)
                 continue
         
-        print(f"✅ 下载完成: {len(memes)} 张")
+        logger.info("下载完成: %d 张", len(memes))
         return memes
         
     except ImportError:
-        print("❌ 请先安装 datasets: pip install datasets")
+        logger.error("请先安装 datasets: pip install datasets")
         raise
     except Exception as e:
-        print(f"❌ 下载失败: {e}")
-        print("\n💡 如果是网络问题，可以尝试:")
-        print("   1. 使用镜像: export HF_ENDPOINT=https://hf-mirror.com")
-        print("   2. 使用代理: export https_proxy=http://127.0.0.1:7890")
-        print("   3. 手动下载后使用 --local 参数")
+        logger.error("下载失败: %s", e)
+        logger.info("如果是网络问题，可以尝试:")
+        logger.info("  Linux/macOS: export HF_ENDPOINT=https://hf-mirror.com")
+        logger.info("  Windows CMD: set HF_ENDPOINT=https://hf-mirror.com")
+        logger.info("  PowerShell:  $env:HF_ENDPOINT='https://hf-mirror.com'")
+        logger.info("  或使用代理 / 手动下载后使用 --local 参数")
         raise
 
 
 def process_local_dataset(local_path: str, max_count: int = MAX_MEMES) -> list[dict]:
     """处理本地已下载的数据集"""
-    print(f"📂 处理本地数据集: {local_path}")
+    logger.info("处理本地数据集: %s", local_path)
     
     local_dir = Path(local_path)
     if not local_dir.exists():
@@ -197,13 +200,13 @@ def process_local_dataset(local_path: str, max_count: int = MAX_MEMES) -> list[d
             count += 1
             
             if count % 100 == 0:
-                print(f"   已处理: {count}/{max_count}")
+                logger.info("   已处理: %d/%d", count, max_count)
                 
         except Exception as e:
-            print(f"   ⚠️ 处理失败 {img_path}: {e}")
+            logger.warning("   处理失败 %s: %s", img_path, e)
             continue
     
-    print(f"✅ 处理完成: {len(memes)} 张")
+    logger.info("处理完成: %d 张", len(memes))
     return memes
 
 
@@ -211,7 +214,7 @@ def clone_chinesebqb(max_count: int = MAX_MEMES) -> list[dict]:
     """从 GitHub 克隆 ChineseBQB 仓库"""
     import subprocess
     
-    print("📥 正在克隆 ChineseBQB 仓库...")
+    logger.info("正在克隆 ChineseBQB 仓库...")
     
     bqb_dir = Path("memes/ChineseBQB")
     
@@ -222,13 +225,13 @@ def clone_chinesebqb(max_count: int = MAX_MEMES) -> list[dict]:
                 "https://github.com/zhaoolee/ChineseBQB.git",
                 str(bqb_dir)
             ], check=True, timeout=300)
-            print("✅ 克隆完成")
+            logger.info("克隆完成")
         except subprocess.CalledProcessError as e:
-            print(f"❌ 克隆失败: {e}")
-            print("💡 可以手动下载: https://github.com/zhaoolee/ChineseBQB")
+            logger.error("克隆失败: %s", e)
+            logger.info("可以手动下载: https://github.com/zhaoolee/ChineseBQB")
             raise
     else:
-        print("   仓库已存在，跳过克隆")
+        logger.info("   仓库已存在，跳过克隆")
     
     # 处理图片
     return process_local_dataset(str(bqb_dir), max_count)
@@ -241,16 +244,15 @@ def save_tags(memes: list[dict]):
         tags_dict[meme["filename"]] = meme["tags"]
     
     TAGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(TAGS_FILE, "w", encoding="utf-8") as f:
+    with open(TAGS_FILE, "w", encoding="utf-8", newline="\n") as f:
         json.dump(tags_dict, f, ensure_ascii=False, indent=2)
     
-    print(f"💾 标签索引已保存: {TAGS_FILE}")
+    logger.info("标签索引已保存: %s", TAGS_FILE)
     
-    # 同时保存完整信息
     full_file = TAGS_FILE.parent / "metadata.json"
-    with open(full_file, "w", encoding="utf-8") as f:
+    with open(full_file, "w", encoding="utf-8", newline="\n") as f:
         json.dump(memes, f, ensure_ascii=False, indent=2)
-    print(f"💾 完整元数据已保存: {full_file}")
+    logger.info("完整元数据已保存: %s", full_file)
 
 
 def main():
@@ -260,9 +262,7 @@ def main():
     parser.add_argument("--max", type=int, default=MAX_MEMES, help=f"最大下载数量 (默认: {MAX_MEMES})")
     args = parser.parse_args()
     
-    print("="*50)
-    print("中文表情包数据集下载工具")
-    print("="*50)
+    logger.info("中文表情包数据集下载工具")
     
     try:
         if args.local:
@@ -275,37 +275,42 @@ def main():
         if memes:
             save_tags(memes)
             
-            # 统计标签分布
             tag_counts = {}
             for meme in memes:
                 for tag in meme["tags"]:
                     tag_counts[tag] = tag_counts.get(tag, 0) + 1
             
-            print("\n📊 标签分布 (Top 10):")
+            logger.info("标签分布 (Top 10):")
             sorted_tags = sorted(tag_counts.items(), key=lambda x: -x[1])[:10]
             for tag, count in sorted_tags:
-                print(f"   {tag}: {count}")
+                logger.info("   %s: %d", tag, count)
             
-            print("\n" + "="*50)
-            print("✅ 下载完成！")
-            print(f"   - 图片数量: {len(memes)}")
-            print(f"   - 图片目录: {MEME_DIR}")
-            print(f"   - 标签文件: {TAGS_FILE}")
-            print("="*50)
-            print("\n下一步: python scripts/build_meme_index.py")
+            logger.info("下载完成!")
+            logger.info("   - 图片数量: %d", len(memes))
+            logger.info("   - 图片目录: %s", MEME_DIR)
+            logger.info("   - 标签文件: %s", TAGS_FILE)
+            logger.info("下一步: python scripts/build_meme_index.py")
         else:
-            print("❌ 未获取到任何图片")
+            logger.error("未获取到任何图片")
             
     except Exception as e:
-        print(f"\n❌ 执行失败: {e}")
-        print("\n💡 备选方案:")
-        print("   1. 使用 HF 镜像: export HF_ENDPOINT=https://hf-mirror.com")
-        print("   2. 使用 Git 克隆: python scripts/download_hf_memes.py --git")
-        print("   3. 手动下载后: python scripts/download_hf_memes.py --local /path/to/images")
+        logger.error("执行失败: %s", e)
+        logger.info("备选方案:")
+        logger.info("  1. Linux/macOS: export HF_ENDPOINT=https://hf-mirror.com")
+        logger.info("     Windows CMD: set HF_ENDPOINT=https://hf-mirror.com")
+        logger.info("     PowerShell:  $env:HF_ENDPOINT='https://hf-mirror.com'")
+        logger.info("  2. 使用 Git 克隆: python scripts/download_hf_memes.py --git")
+        logger.info("  3. 手动下载后: python scripts/download_hf_memes.py --local /path/to/images")
         return 1
     
     return 0
 
 
 if __name__ == "__main__":
+    from log_config import setup_logging
+    from compat import ensure_utf8_env, get_platform_info
+
+    ensure_utf8_env()
+    setup_logging()
+    logger.info("Platform: %s", get_platform_info())
     exit(main())

@@ -15,6 +15,10 @@ from datetime import datetime, timedelta
 from typing import Optional
 from dataclasses import dataclass, asdict
 
+from log_config import get_logger
+
+logger = get_logger(__name__)
+
 # 配置
 WERSS_API = os.getenv("WERSS_API", "http://localhost:8001/api/v1/wx")
 WERSS_USERNAME = os.getenv("WERSS_USERNAME", "admin")
@@ -71,13 +75,13 @@ class WeRSSClient:
                 self.token = data.get("access_token") or data.get("token")
                 if self.token:
                     self.session.headers["Authorization"] = f"Bearer {self.token}"
-                print(f"✅ 登录成功")
+                logger.info("登录成功")
                 return True
             else:
-                print(f"❌ 登录失败: {resp.text}")
+                logger.error("登录失败: %s", resp.text)
                 return False
         except Exception as e:
-            print(f"❌ 连接失败: {e}")
+            logger.error("连接失败: %s", e)
             return False
     
     def get_mps(self) -> list[dict]:
@@ -89,7 +93,7 @@ class WeRSSClient:
                 return data.get("items", data.get("data", []))
             return []
         except Exception as e:
-            print(f"⚠️ 获取公众号失败: {e}")
+            logger.warning("获取公众号失败: %s", e)
             return []
     
     def get_articles(self, mp_id: Optional[str] = None, 
@@ -106,7 +110,7 @@ class WeRSSClient:
                 return data.get("items", data.get("data", []))
             return []
         except Exception as e:
-            print(f"⚠️ 获取文章失败: {e}")
+            logger.warning("获取文章失败: %s", e)
             return []
     
     def get_article_content(self, article_id: str) -> Optional[dict]:
@@ -117,7 +121,7 @@ class WeRSSClient:
                 return resp.json()
             return None
         except Exception as e:
-            print(f"⚠️ 获取文章详情失败: {e}")
+            logger.warning("获取文章详情失败: %s", e)
             return None
 
 
@@ -171,7 +175,7 @@ def save_article(article: Article, output_dir: Path):
     filename = f"{article.id}_{safe_title}.json"
     filepath = output_dir / filename
     
-    with open(filepath, "w", encoding="utf-8") as f:
+    with open(filepath, "w", encoding="utf-8", newline="\n") as f:
         json.dump(asdict(article), f, ensure_ascii=False, indent=2)
     
     return filepath
@@ -179,32 +183,29 @@ def save_article(article: Article, output_dir: Path):
 
 def main():
     """主函数"""
-    print("="*50)
-    print("优质文章采集")
-    print("="*50)
-    print(f"WeRSS API: {WERSS_API}")
-    print(f"输出目录: {OUTPUT_DIR}")
-    print("="*50)
+    logger.info("优质文章采集")
+    logger.info("WeRSS API: %s", WERSS_API)
+    logger.info("输出目录: %s", OUTPUT_DIR)
     
     # 创建客户端
     client = WeRSSClient()
     
     # 登录
     if not client.login(WERSS_USERNAME, WERSS_PASSWORD):
-        print("\n❌ 无法连接 WeRSS，请确保：")
-        print("   1. WeRSS 已启动 (运行 setup_werss.sh)")
-        print("   2. 环境变量已配置 (WERSS_USERNAME, WERSS_PASSWORD)")
+        logger.error("无法连接 WeRSS，请确保：")
+        logger.error("   1. WeRSS 已启动 (运行 setup_werss.sh)")
+        logger.error("   2. 环境变量已配置 (WERSS_USERNAME, WERSS_PASSWORD)")
         return
     
     # 获取公众号列表
     mps = client.get_mps()
-    print(f"\n📰 已订阅 {len(mps)} 个公众号")
+    logger.info("已订阅 %d 个公众号", len(mps))
     
     if not mps:
-        print("\n⚠️ 未订阅任何公众号，请先在 WeRSS 中添加订阅")
-        print("\n推荐订阅的 AI/互联网资讯类公众号：")
+        logger.warning("未订阅任何公众号，请先在 WeRSS 中添加订阅")
+        logger.info("推荐订阅的 AI/互联网资讯类公众号：")
         for acc in RECOMMENDED_ACCOUNTS:
-            print(f"   - {acc['name']}: {acc['description']}")
+            logger.info("   - %s: %s", acc['name'], acc['description'])
         return
     
     # 采集文章
@@ -214,11 +215,10 @@ def main():
         mp_name = mp.get("mp_name", "未知")
         mp_id = mp.get("id")
         
-        print(f"\n📁 {mp_name}")
+        logger.info("公众号: %s", mp_name)
         
-        # 获取文章列表
         articles = client.get_articles(mp_id=mp_id, page_size=50)
-        print(f"   找到 {len(articles)} 篇文章")
+        logger.info("   找到 %d 篇文章", len(articles))
         
         for art in articles:
             # 获取详情
@@ -249,7 +249,7 @@ def main():
             # 保存
             filepath = save_article(article, OUTPUT_DIR)
             all_articles.append(article)
-            print(f"   ✅ {article.title[:30]}...")
+            logger.info("   采集: %s...", article.title[:30])
         
         time.sleep(0.5)  # 避免请求过快
     
@@ -269,17 +269,21 @@ def main():
     
     # 保存统计
     stats_file = OUTPUT_DIR / "stats.json"
-    with open(stats_file, "w", encoding="utf-8") as f:
+    with open(stats_file, "w", encoding="utf-8", newline="\n") as f:
         json.dump(stats, f, ensure_ascii=False, indent=2)
     
-    print("\n" + "="*50)
-    print("✅ 采集完成！")
-    print(f"   - 文章数量: {stats['total_articles']}")
-    print(f"   - 总字数: {stats['total_words']:,}")
-    print(f"   - 输出目录: {OUTPUT_DIR}")
-    print("="*50)
-    print("\n下一步: 使用这些文章优化评价体系")
+    logger.info("采集完成!")
+    logger.info("   - 文章数量: %d", stats['total_articles'])
+    logger.info("   - 总字数: %d", stats['total_words'])
+    logger.info("   - 输出目录: %s", OUTPUT_DIR)
+    logger.info("下一步: 使用这些文章优化评价体系")
 
 
 if __name__ == "__main__":
+    from log_config import setup_logging
+    from compat import ensure_utf8_env, get_platform_info
+
+    ensure_utf8_env()
+    setup_logging()
+    logger.info("Platform: %s", get_platform_info())
     main()

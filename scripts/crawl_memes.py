@@ -19,6 +19,10 @@ from typing import Optional
 from dataclasses import dataclass, asdict
 from concurrent.futures import ThreadPoolExecutor
 
+from log_config import get_logger
+
+logger = get_logger(__name__)
+
 # 禁用 SSL 警告（仅用于国内网站 SSL 问题）
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -139,7 +143,7 @@ class GiphyCrawler(MemeCrawler):
     
     def crawl(self, limit: int = 400) -> list[Meme]:
         """爬取 Giphy 表情包"""
-        print("\n📥 开始爬取 Giphy...")
+        logger.info("开始爬取 Giphy...")
         memes = []
         
         # 使用公开 API（无需 key，但有限制）
@@ -152,7 +156,7 @@ class GiphyCrawler(MemeCrawler):
             if len(memes) >= limit:
                 break
             
-            print(f"  🔍 搜索: {eng_key}")
+            logger.info("  搜索: %s", eng_key)
             
             try:
                 params = {
@@ -185,15 +189,15 @@ class GiphyCrawler(MemeCrawler):
                         )
                         if meme:
                             memes.append(meme)
-                            print(f"    ✅ {meme.filename}")
+                            logger.debug("    下载: %s", meme.filename)
                 
                 time.sleep(0.3)
                 
             except Exception as e:
-                print(f"  ⚠️ 搜索 {eng_key} 失败: {e}")
+                logger.warning("  搜索 %s 失败: %s", eng_key, e)
                 continue
         
-        print(f"  📊 Giphy 爬取完成: {len(memes)} 张")
+        logger.info("  Giphy 爬取完成: %d 张", len(memes))
         return memes
 
 
@@ -215,14 +219,13 @@ class TenorCrawler(MemeCrawler):
     
     def crawl(self, limit: int = 300) -> list[Meme]:
         """爬取 Tenor 表情包"""
-        print("\n📥 开始爬取 Tenor...")
+        logger.info("开始爬取 Tenor...")
         memes = []
         
-        # Tenor API（需要注册获取 key，这里用公开接口）
         base_url = "https://tenor.googleapis.com/v2/search"
-        api_key = TENOR_API_KEY  # 需要设置环境变量 TENOR_API_KEY
+        api_key = TENOR_API_KEY
         if not api_key:
-            print("⚠️ 未设置 TENOR_API_KEY，跳过 Tenor 爬取")
+            logger.warning("未设置 TENOR_API_KEY，跳过 Tenor 爬取")
             return []
         
         per_keyword = limit // len(self.KEYWORDS)
@@ -231,7 +234,7 @@ class TenorCrawler(MemeCrawler):
             if len(memes) >= limit:
                 break
             
-            print(f"  🔍 搜索: {eng_key}")
+            logger.info("  搜索: %s", eng_key)
             
             try:
                 params = {
@@ -267,15 +270,15 @@ class TenorCrawler(MemeCrawler):
                         )
                         if meme:
                             memes.append(meme)
-                            print(f"    ✅ {meme.filename}")
+                            logger.debug("    下载: %s", meme.filename)
                 
                 time.sleep(0.3)
                 
             except Exception as e:
-                print(f"  ⚠️ 搜索 {eng_key} 失败: {e}")
+                logger.warning("  搜索 %s 失败: %s", eng_key, e)
                 continue
         
-        print(f"  📊 Tenor 爬取完成: {len(memes)} 张")
+        logger.info("  Tenor 爬取完成: %d 张", len(memes))
         return memes
 
 
@@ -313,7 +316,7 @@ class GitHubMemeCrawler(MemeCrawler):
     
     def crawl(self, limit: int = 400) -> list[Meme]:
         """从 GitHub 下载表情包"""
-        print("\n📥 开始从 GitHub 下载表情包...")
+        logger.info("开始从 GitHub 下载表情包...")
         memes = []
         
         per_repo = limit // len(self.REPOS)
@@ -322,7 +325,7 @@ class GitHubMemeCrawler(MemeCrawler):
             if len(memes) >= limit:
                 break
             
-            print(f"  📁 下载: {repo['tags'][0]}")
+            logger.info("  下载: %s", repo['tags'][0])
             
             try:
                 # 获取目录内容
@@ -361,15 +364,15 @@ class GitHubMemeCrawler(MemeCrawler):
                         if meme:
                             memes.append(meme)
                             count += 1
-                            print(f"    ✅ {meme.filename}")
+                            logger.debug("    下载: %s", meme.filename)
                 
                 time.sleep(0.5)
                 
             except Exception as e:
-                print(f"  ⚠️ 下载失败: {e}")
+                logger.warning("  下载失败: %s", e)
                 continue
         
-        print(f"  📊 GitHub 爬取完成: {len(memes)} 张")
+        logger.info("  GitHub 爬取完成: %d 张", len(memes))
         return memes
 
 
@@ -381,7 +384,7 @@ class DoutulaCrawler(MemeCrawler):
     
     def crawl(self, limit: int = 200) -> list[Meme]:
         """爬取斗图网"""
-        print("\n📥 开始爬取斗图网（禁用 SSL 验证）...")
+        logger.info("开始爬取斗图网（禁用 SSL 验证）...")
         memes = []
         
         per_keyword = limit // len(self.KEYWORDS)
@@ -390,10 +393,9 @@ class DoutulaCrawler(MemeCrawler):
             if len(memes) >= limit:
                 break
             
-            print(f"  🔍 搜索: {keyword}")
+            logger.info("  搜索: %s", keyword)
             
             try:
-                # 禁用 SSL 验证
                 url = f"https://www.doutula.com/api/search?keyword={keyword}&page=1"
                 resp = requests.get(url, headers=HEADERS, timeout=10, verify=False)
                 
@@ -412,15 +414,15 @@ class DoutulaCrawler(MemeCrawler):
                             )
                             if meme:
                                 memes.append(meme)
-                                print(f"    ✅ {meme.filename}")
+                                logger.debug("    下载: %s", meme.filename)
                 
                 time.sleep(0.5)
                 
             except Exception as e:
-                print(f"  ⚠️ 搜索 {keyword} 失败: {e}")
+                logger.warning("  搜索 %s 失败: %s", keyword, e)
                 continue
         
-        print(f"  📊 斗图网爬取完成: {len(memes)} 张")
+        logger.info("  斗图网爬取完成: %d 张", len(memes))
         return memes
 
 
@@ -431,20 +433,17 @@ def save_tags(memes: list[Meme], output_file: Path):
         tags_dict[meme.filename] = meme.tags
     
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_file, "w", encoding="utf-8") as f:
+    with open(output_file, "w", encoding="utf-8", newline="\n") as f:
         json.dump(tags_dict, f, ensure_ascii=False, indent=2)
     
-    print(f"\n💾 标签索引已保存: {output_file}")
+    logger.info("标签索引已保存: %s", output_file)
 
 
 def main():
     """主函数"""
-    print("="*50)
-    print("表情包爬虫 v2")
-    print("="*50)
-    print(f"目标数量: {MAX_MEMES} 张")
-    print(f"输出目录: {MEME_DIR}")
-    print("="*50)
+    logger.info("表情包爬虫 v2")
+    logger.info("目标数量: %d 张", MAX_MEMES)
+    logger.info("输出目录: %s", MEME_DIR)
     
     all_memes = []
     
@@ -474,17 +473,21 @@ def main():
         source = meme.source
         source_stats[source] = source_stats.get(source, 0) + 1
     
-    print("\n" + "="*50)
-    print("✅ 爬取完成！")
-    print(f"  - 总数量: {len(all_memes)} 张")
-    print("  - 来源分布:")
+    logger.info("爬取完成!")
+    logger.info("  - 总数量: %d 张", len(all_memes))
+    logger.info("  - 来源分布:")
     for source, count in source_stats.items():
-        print(f"      {source}: {count} 张")
-    print(f"  - 图片目录: {MEME_DIR}")
-    print(f"  - 标签文件: {TAGS_FILE}")
-    print("="*50)
-    print("\n下一步: 运行 python scripts/build_meme_index.py 构建 CLIP 向量索引")
+        logger.info("      %s: %d 张", source, count)
+    logger.info("  - 图片目录: %s", MEME_DIR)
+    logger.info("  - 标签文件: %s", TAGS_FILE)
+    logger.info("下一步: 运行 python scripts/build_meme_index.py 构建 CLIP 向量索引")
 
 
 if __name__ == "__main__":
+    from log_config import setup_logging
+    from compat import ensure_utf8_env, get_platform_info
+
+    ensure_utf8_env()
+    setup_logging()
+    logger.info("Platform: %s", get_platform_info())
     main()

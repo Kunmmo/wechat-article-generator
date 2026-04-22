@@ -3,6 +3,7 @@
 表情包语义检索模块
 
 基于 CLIP 向量索引进行表情包语义检索。
+支持 OpenCLIP (ViT-B-32) 和 Chinese-CLIP (CN-CLIP) 双模型。
 当检索失败时，调用生图 API 生成表情包。
 """
 
@@ -13,20 +14,29 @@ from pathlib import Path
 from typing import Optional, Tuple
 from PIL import Image
 
+from log_config import get_logger
+
+logger = get_logger(__name__)
+
 # 配置
 MEME_DIR = Path("memes/images")
 EMBEDDINGS_FILE = Path("memes/embeddings.npy")
+CN_EMBEDDINGS_FILE = Path("memes/cn_embeddings.npy")
 INDEX_FILE = Path("memes/index.json")
 TAGS_FILE = Path("memes/tags.json")
 
 # 相似度阈值：低于此值触发生图
 SIMILARITY_THRESHOLD = 0.25
 
+# 模型选择: "openclip" 或 "cn-clip"
+DEFAULT_CLIP_MODEL = os.getenv("CLIP_MODEL", "openclip")
+
 
 class MemeRetriever:
-    """表情包检索器"""
+    """表情包检索器（OpenCLIP 后端）"""
     
-    def __init__(self):
+    def __init__(self, clip_model: Optional[str] = None):
+        self.clip_model = clip_model or DEFAULT_CLIP_MODEL
         self.model = None
         self.tokenizer = None
         self.preprocess = None
@@ -37,7 +47,15 @@ class MemeRetriever:
     
     def load(self):
         """加载模型和索引"""
-        # 加载 CLIP 模型
+        if self.clip_model == "cn-clip":
+            self._load_cn_clip()
+        else:
+            self._load_openclip()
+
+        self._load_index()
+
+    def _load_openclip(self):
+        """加载 OpenCLIP ViT-B-32 模型"""
         import open_clip
         import torch
         
@@ -50,22 +68,67 @@ class MemeRetriever:
         self.device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
         self.model = self.model.to(self.device)
         self.model.eval()
-        
-        # 加载向量索引
-        if EMBEDDINGS_FILE.exists() and INDEX_FILE.exists():
-            self.embeddings = np.load(EMBEDDINGS_FILE)
-            with open(INDEX_FILE, "r") as f:
+        logger.info("OpenCLIP 模型加载成功 (device: %s)", self.device)
+
+    def _load_cn_clip(self):
+        """加载 Chinese-CLIP 模型（更好的中文语义理解）"""
+        import torch
+
+        try:
+            import cn_clip.clip as clip
+            from cn_clip.clip import load_from_name
+
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            self.model, self.preprocess = load_from_name(
+                "ViT-B-16", device=self.device, download_root="./models"
+            )
+            self.tokenizer = clip.tokenize
+            self.model.eval()
+            self.clip_model = "cn-clip"
+            logger.info("Chinese-CLIP 模型加载成功 (device: %s)", self.device)
+        except ImportError:
+            logger.warning("cn-clip 未安装，回退到 OpenCLIP (安装: pip install cn_clip)")
+            self._load_openclip()
+
+    def _load_index(self):
+        """加载向量索引"""
+        embeddings_file = CN_EMBEDDINGS_FILE if self.clip_model == "cn-clip" else EMBEDDINGS_FILE
+
+        if embeddings_file.exists() and INDEX_FILE.exists():
+            self.embeddings = np.load(embeddings_file)
+            with open(INDEX_FILE, "r", encoding="utf-8") as f:
                 index = json.load(f)
                 self.filenames = index.get("files", [])
-            print(f"✅ 已加载 {len(self.filenames)} 张表情包索引")
+            logger.info("已加载 %d 张表情包索引", len(self.filenames))
+        elif EMBEDDINGS_FILE.exists() and INDEX_FILE.exists():
+            # Fallback to standard embeddings
+            self.embeddings = np.load(EMBEDDINGS_FILE)
+            with open(INDEX_FILE, "r", encoding="utf-8") as f:
+                index = json.load(f)
+                self.filenames = index.get("files", [])
+            logger.info("已加载 %d 张表情包索引 (标准索引)", len(self.filenames))
         else:
-            print("⚠️ 索引文件不存在，请先运行 build_meme_index.py")
-        
-        # 加载标签
+            logger.warning("索引文件不存在，请先运行 build_meme_index.py")
+
         if TAGS_FILE.exists():
-            with open(TAGS_FILE, "r") as f:
+            with open(TAGS_FILE, "r", encoding="utf-8") as f:
                 self.tags = json.load(f)
     
+    def _encode_text(self, query: str):
+        """编码文本为向量（适配不同后端）"""
+        import torch
+
+        with torch.no_grad():
+            if self.clip_model == "cn-clip":
+                text = self.tokenizer([query]).to(self.device)
+                text_embedding = self.model.encode_text(text)
+            else:
+                text = self.tokenizer([query]).to(self.device)
+                text_embedding = self.model.encode_text(text)
+
+            text_embedding = text_embedding / text_embedding.norm(dim=-1, keepdim=True)
+            return text_embedding.cpu().numpy()[0]
+
     def search(self, query: str, top_k: int = 5) -> list[Tuple[str, float]]:
         """
         搜索最匹配的表情包
@@ -77,22 +140,11 @@ class MemeRetriever:
         Returns:
             [(文件名, 相似度分数), ...]
         """
-        import torch
-        
         if self.embeddings is None or len(self.filenames) == 0:
             return []
         
-        # 编码查询文本
-        with torch.no_grad():
-            text = self.tokenizer([query]).to(self.device)
-            text_embedding = self.model.encode_text(text)
-            text_embedding = text_embedding / text_embedding.norm(dim=-1, keepdim=True)
-            text_embedding = text_embedding.cpu().numpy()[0]
-        
-        # 计算相似度
+        text_embedding = self._encode_text(query)
         similarities = np.dot(self.embeddings, text_embedding)
-        
-        # 排序
         top_indices = np.argsort(similarities)[::-1][:top_k]
         
         results = []
@@ -120,7 +172,7 @@ class MemeRetriever:
             return filepath, score, "retrieval"
         
         # 检索失败，尝试生成
-        print(f"  ⚠️ 检索失败（相似度 < {SIMILARITY_THRESHOLD}），尝试生成...")
+        logger.info("检索失败（相似度 < %s），尝试生成...", SIMILARITY_THRESHOLD)
         
         generated_path = self._generate_meme(query)
         if generated_path:
@@ -135,73 +187,15 @@ class MemeRetriever:
         return None, 0.0, "not_found"
     
     def _generate_meme(self, prompt: str) -> Optional[str]:
-        """调用 Gemini API 生成表情包"""
-        import requests
-        import base64
-        import hashlib
-        from datetime import datetime
-        
-        # 加载配置
-        config_path = Path(__file__).parent.parent / 'config' / 'gemini.json'
-        if not config_path.exists():
-            print("  ⚠️ 未找到 config/gemini.json，无法生成")
-            return None
-        
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-        
+        """调用 Gemini API 生成表情包（通过 gemini_client 统一模块）"""
         try:
-            # 构造生图提示词
-            full_prompt = f"""Generate a meme-style image:
-- Theme/Emotion: {prompt}
-- Style: Exaggerated expression, cartoon style, suitable for social media
-- Requirements: No text in image, pure visual expression, square format
-- Quality: High quality, clear details"""
-
-            # 调用 Gemini API
-            url = f"{config['base_url']}/models/{config['model']}:generateContent"
-            headers = {"Content-Type": "application/json"}
-            params = {"key": config['api_key']}
-            payload = {
-                "contents": [{"parts": [{"text": full_prompt}]}],
-                "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}
-            }
-            
-            response = requests.post(url, headers=headers, params=params, json=payload, timeout=60)
-            
-            if response.status_code == 200:
-                result = response.json()
-                
-                # 解析返回的图片
-                for candidate in result.get('candidates', []):
-                    for part in candidate.get('content', {}).get('parts', []):
-                        if 'inlineData' in part:
-                            img_data = base64.b64decode(part['inlineData']['data'])
-                            
-                            # 生成文件名
-                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                            hash_name = hashlib.md5(prompt.encode()).hexdigest()[:8]
-                            filename = f"gen_meme_{timestamp}_{hash_name}.png"
-                            
-                            # 保存到生成目录
-                            gen_dir = Path("outputs/images/memes")
-                            gen_dir.mkdir(parents=True, exist_ok=True)
-                            filepath = gen_dir / filename
-                            
-                            with open(filepath, "wb") as f:
-                                f.write(img_data)
-                            
-                            print(f"  ✅ 生成成功: {filepath}")
-                            return str(filepath)
-                
-                print(f"  ⚠️ API 返回无图片数据")
-                return None
-            else:
-                print(f"  ❌ API 错误: {response.status_code}")
-                return None
-            
+            from gemini_client import generate_image
+            return generate_image(prompt, image_type="meme")
+        except FileNotFoundError:
+            logger.warning("未找到 config/gemini.json，无法生成")
+            return None
         except Exception as e:
-            print(f"  ❌ 生成失败: {e}")
+            logger.error("生成失败: %s", e)
             return None
 
 
@@ -236,7 +230,7 @@ def process_article_memes(content: str, retriever: MemeRetriever) -> dict:
         if tag in results:
             continue
         
-        print(f"🔍 处理: [MEME: {tag}]")
+        logger.info("处理: [MEME: %s]", tag)
         path, score, source = retriever.get_meme(tag)
         
         results[tag] = {
@@ -245,33 +239,34 @@ def process_article_memes(content: str, retriever: MemeRetriever) -> dict:
             "source": source,
         }
         
-        print(f"   → {source}: {path} (score: {score:.3f})")
+        logger.info("   -> %s: %s (score: %.3f)", source, path, score)
     
     return results
 
 
 # 示例使用
 if __name__ == "__main__":
-    print("="*50)
-    print("表情包检索测试")
-    print("="*50)
+    from log_config import setup_logging
+    from compat import ensure_utf8_env, get_platform_info
+
+    ensure_utf8_env()
+    setup_logging()
+    logger.info("Platform: %s", get_platform_info())
+
+    logger.info("表情包检索测试")
     
     retriever = MemeRetriever()
     retriever.load()
     
-    # 测试检索
     test_queries = ["震惊", "无语", "狗头", "开心", "难过"]
     
     for query in test_queries:
-        print(f"\n🔍 查询: {query}")
+        logger.info("查询: %s", query)
         results = retriever.search(query, top_k=3)
         for filename, score in results:
-            print(f"   {filename}: {score:.3f}")
+            logger.info("   %s: %.3f", filename, score)
     
-    # 测试文章处理
-    print("\n" + "="*50)
-    print("文章表情包处理测试")
-    print("="*50)
+    logger.info("文章表情包处理测试")
     
     test_content = """
     这个消息太劲爆了 [MEME: 震惊]
@@ -282,5 +277,4 @@ if __name__ == "__main__":
     """
     
     results = process_article_memes(test_content, retriever)
-    print("\n处理结果:")
-    print(json.dumps(results, indent=2, ensure_ascii=False))
+    logger.info("处理结果: %s", json.dumps(results, indent=2, ensure_ascii=False))
